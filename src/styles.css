@@ -19,6 +19,8 @@
  */
 
 @theme inline {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -62,30 +64,30 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
+  --radius: 0.375rem;
+  --background: oklch(0.135 0.026 259.6);
+  --foreground: oklch(0.925 0.012 264);
+  --card: oklch(0.19 0.035 264.5);
+  --card-foreground: oklch(0.925 0.012 264);
+  --popover: oklch(0.19 0.035 264.5);
+  --popover-foreground: oklch(0.925 0.012 264);
+  --primary: oklch(0.765 0.135 183.5);
+  --primary-foreground: oklch(0.135 0.026 259.6);
+  --secondary: oklch(0.235 0.037 262.4);
+  --secondary-foreground: oklch(0.925 0.012 264);
+  --muted: oklch(0.225 0.029 263.5);
+  --muted-foreground: oklch(0.57 0.029 260.5);
+  --accent: oklch(0.27 0.036 260.8);
+  --accent-foreground: oklch(0.925 0.012 264);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
+  --border: oklch(0.31 0.035 261.5);
+  --input: oklch(0.31 0.035 261.5);
+  --ring: oklch(0.765 0.135 183.5);
+  --chart-1: oklch(0.765 0.135 183.5);
+  --chart-2: oklch(0.735 0.174 64.5);
+  --chart-3: oklch(0.64 0.21 25.5);
+  --chart-4: oklch(0.71 0.13 235);
   --chart-5: oklch(0.769 0.188 70.08);
   --sidebar: oklch(0.984 0.003 247.858);
   --sidebar-foreground: oklch(0.129 0.042 264.695);
@@ -140,5 +142,17 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    letter-spacing: 0;
+    margin: 0;
   }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes monitor-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
+  .monitor-pulse { animation: monitor-pulse 2.4s ease-in-out infinite; }
 }
