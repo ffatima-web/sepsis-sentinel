@@ -56,6 +56,7 @@ const patientFallback: PatientList = {
   septic_patients: ["p000009", "p000143", "p000271"],
   non_septic_patients: ["p000032", "p000118", "p000406"],
 };
+const initialPatientId = "p000009";
 
 function makeVitals(patientId: string): Vitals {
   const urgent = patientId === "p000009" || patientId === "p000143";
@@ -125,9 +126,9 @@ function SepsisDashboard() {
   const [apiUrl, setApiUrl] = useState(DEFAULT_API);
   const [draftApiUrl, setDraftApiUrl] = useState(DEFAULT_API);
   const [patients, setPatients] = useState(patientFallback);
-  const [patientId, setPatientId] = useState(patientFallback.septic_patients[0]);
-  const [vitals, setVitals] = useState(() => makeVitals(patientFallback.septic_patients[0]));
-  const [triage, setTriage] = useState(() => makeTriage(patientFallback.septic_patients[0]));
+  const [patientId, setPatientId] = useState(initialPatientId);
+  const [vitals, setVitals] = useState(() => makeVitals(initialPatientId));
+  const [triage, setTriage] = useState(() => makeTriage(initialPatientId));
   const [source, setSource] = useState<"live" | "demo">("demo");
   const [loading, setLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
