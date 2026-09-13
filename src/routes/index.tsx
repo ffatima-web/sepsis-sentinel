@@ -669,6 +669,123 @@ function SepsisDashboard() {
             </div>
           </aside>
         </div>
+
+        <section
+          className="mt-8 border border-dashed border-border bg-card/40"
+          aria-labelledby="custom-vitals-heading"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-border px-5 py-4">
+            <div>
+              <h2 id="custom-vitals-heading" className="font-medium">
+                Test custom vitals
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Manual evaluation — enter 3 hourly readings to simulate a trend. This does not use
+                the selected patient record.
+              </p>
+            </div>
+            <Button
+              onClick={() => void runCustomAssessment()}
+              disabled={customLoading}
+              aria-label="Run assessment on custom vitals"
+            >
+              {customLoading ? "Assessing…" : "Run assessment"}
+            </Button>
+          </div>
+
+          <div className="grid gap-px bg-border md:grid-cols-3">
+            {customReadings.map((reading, rowIndex) => (
+              <fieldset key={rowIndex} className="bg-card p-4">
+                <legend className="px-1 font-mono text-xs text-muted-foreground">
+                  Hour {rowIndex + 1}
+                </legend>
+                <div className="grid grid-cols-2 gap-3">
+                  {CUSTOM_FIELD_LABELS.map(({ key, label, unit }) => {
+                    const optional = key === "Lactate" || key === "WBC";
+                    return (
+                      <label key={key} className={optional ? "col-span-1" : "col-span-1"}>
+                        <span className="mb-1 block text-xs text-muted-foreground">
+                          {label} <span className="font-mono">{unit}</span>
+                        </span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="any"
+                          value={reading[key]}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setCustomReadings((current) =>
+                              current.map((item, index) =>
+                                index === rowIndex ? { ...item, [key]: value } : item,
+                              ),
+                            );
+                          }}
+                          className="h-9 w-full border border-border bg-background px-2 font-mono text-sm text-foreground outline-none focus:border-primary"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+
+          {customResult && (
+            <div className="border-t border-dashed border-border p-5">
+              <div
+                className={`border-l-4 bg-card px-5 py-4 ${
+                  customResult.alert.tier === "URGENT"
+                    ? "border-chart-3 text-chart-3"
+                    : customResult.alert.tier === "ELEVATED"
+                      ? "border-chart-2 text-chart-2"
+                      : "border-primary text-primary"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Custom assessment tier</p>
+                    <p className="mt-1 font-mono text-2xl font-semibold">
+                      {customResult.alert.tier}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 font-mono text-xs text-muted-foreground">
+                    <span>
+                      qSOFA {customResult.vitals_flags.qsofa_score}/3 · SIRS{" "}
+                      {customResult.vitals_flags.sirs_score}/4
+                    </span>
+                    <span>
+                      Risk {(customResult.risk_result.current_risk_score * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-5 md:grid-cols-2">
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                      Clinical reasoning
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-foreground/90">
+                      {customResult.alert.reasoning}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                      Recommended action
+                    </h3>
+                    <p className="mt-2 text-sm font-medium leading-6 text-foreground">
+                      {customResult.alert.action_recommended}
+                    </p>
+                  </div>
+                </div>
+                {customResult.note && (
+                  <p className="mt-4 text-xs italic text-muted-foreground">
+                    {customResult.note}
+                    {customSource === "demo" ? "" : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
 
       {settingsOpen && (
