@@ -266,6 +266,10 @@ function SepsisDashboard() {
   const [source, setSource] = useState<"live" | "demo">("demo");
   const [loading, setLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [customReadings, setCustomReadings] = useState<CustomReading[]>(sampleCustomReadings);
+  const [customResult, setCustomResult] = useState<CustomTriage | null>(null);
+  const [customLoading, setCustomLoading] = useState(false);
+  const [customSource, setCustomSource] = useState<"live" | "demo">("demo");
 
   useEffect(() => {
     const saved = window.localStorage.getItem("sepsis-triage-api-url");
