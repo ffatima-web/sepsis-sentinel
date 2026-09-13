@@ -101,7 +101,15 @@ function toNumbers(reading: CustomReading) {
 }
 
 function scoreCustomReadings(readings: ReturnType<typeof toNumbers>[]): CustomTriage {
-  const last = readings[readings.length - 1];
+  const last = readings[readings.length - 1] ?? {
+    HR: null,
+    Resp: null,
+    Temp: null,
+    SBP: null,
+    MAP: null,
+    Lactate: null,
+    WBC: null,
+  };
   const hr = last.HR ?? 80;
   const resp = last.Resp ?? 16;
   const temp = last.Temp ?? 37;
