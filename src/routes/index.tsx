@@ -779,7 +779,7 @@ function SepsisDashboard() {
                 {customResult.note && (
                   <p className="mt-4 text-xs italic text-muted-foreground">
                     {customResult.note}
-                    {customSource === "demo" ? "" : ""}
+                    {customSource === "live" ? " Source: live backend." : ""}
                   </p>
                 )}
               </div>
