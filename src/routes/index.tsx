@@ -52,6 +52,113 @@ type Triage = {
 };
 
 const DEFAULT_API = "http://localhost:8000";
+
+type CustomReading = {
+  HR: string;
+  Resp: string;
+  Temp: string;
+  SBP: string;
+  MAP: string;
+  Lactate: string;
+  WBC: string;
+};
+type CustomTriage = Triage & { note?: string };
+
+const CUSTOM_FIELD_LABELS: Array<{ key: keyof CustomReading; label: string; unit: string }> = [
+  { key: "HR", label: "HR", unit: "bpm" },
+  { key: "Resp", label: "Resp", unit: "/min" },
+  { key: "Temp", label: "Temp", unit: "°C" },
+  { key: "SBP", label: "SBP", unit: "mmHg" },
+  { key: "MAP", label: "MAP", unit: "mmHg" },
+  { key: "Lactate", label: "Lactate", unit: "mmol/L (opt.)" },
+  { key: "WBC", label: "WBC", unit: "×10⁹/L (opt.)" },
+];
+
+function sampleCustomReadings(): CustomReading[] {
+  return [
+    { HR: "104", Resp: "22", Temp: "38.2", SBP: "108", MAP: "78", Lactate: "2.4", WBC: "13.1" },
+    { HR: "111", Resp: "25", Temp: "38.6", SBP: "101", MAP: "72", Lactate: "3.0", WBC: "14.8" },
+    { HR: "118", Resp: "28", Temp: "39.1", SBP: "94", MAP: "66", Lactate: "3.8", WBC: "16.2" },
+  ];
+}
+
+function toNumbers(reading: CustomReading) {
+  const parse = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : null;
+  };
+  return {
+    HR: parse(reading.HR),
+    Resp: parse(reading.Resp),
+    Temp: parse(reading.Temp),
+    SBP: parse(reading.SBP),
+    MAP: parse(reading.MAP),
+    Lactate: parse(reading.Lactate),
+    WBC: parse(reading.WBC),
+  };
+}
+
+function scoreCustomReadings(readings: ReturnType<typeof toNumbers>[]): CustomTriage {
+  const last = readings[readings.length - 1];
+  const hr = last.HR ?? 80;
+  const resp = last.Resp ?? 16;
+  const temp = last.Temp ?? 37;
+  const sbp = last.SBP ?? 120;
+  const lactate = last.Lactate ?? null;
+  const wbc = last.WBC ?? null;
+
+  const respHigh = resp >= 22;
+  const sbpLow = sbp <= 100;
+  const tempAbnormal = temp >= 38.3 || temp <= 36;
+  const hrHigh = hr > 90;
+  const qsofa = (respHigh ? 1 : 0) + (sbpLow ? 1 : 0);
+  const sirs =
+    (tempAbnormal ? 1 : 0) + (hrHigh ? 1 : 0) + (respHigh ? 1 : 0) + (wbc !== null && (wbc > 12 || wbc < 4) ? 1 : 0);
+
+  let risk = 0.08 + qsofa * 0.17 + sirs * 0.09;
+  if (lactate !== null && lactate >= 2) risk += Math.min(0.18, (lactate - 2) * 0.06);
+  const escalated = risk >= 0.75;
+  risk = Math.min(0.98, risk);
+
+  const trend = readings.map((r, index) => {
+    const stepRisk = Math.max(0.03, risk - (readings.length - 1 - index) * 0.05);
+    return Number(stepRisk.toFixed(3));
+  });
+  trend[trend.length - 1] = Number(risk.toFixed(3));
+
+  const tier: Tier = escalated ? "URGENT" : risk >= 0.45 ? "ELEVATED" : "ROUTINE";
+  return {
+    patient_id: "custom-input",
+    hour: 0,
+    vitals_flags: {
+      qsofa_score: qsofa,
+      sirs_score: sirs,
+      resp_high: respHigh,
+      sbp_low: sbpLow,
+      temp_abnormal: tempAbnormal,
+      hr_high: hrHigh,
+    },
+    risk_result: { current_risk_score: Number(risk.toFixed(3)), escalated, risk_trend: trend },
+    alert: {
+      tier,
+      reasoning:
+        tier === "URGENT"
+          ? "The latest reading shows tachycardia, tachypnea, and abnormal temperature with falling blood pressure across the trend. Screening scores and model risk meet escalation thresholds for evolving sepsis."
+          : tier === "ELEVATED"
+            ? "Some measurements are trending outside expected ranges with a moderate predicted risk. The pattern warrants closer surveillance and repeat assessment."
+            : "Entered measurements remain within expected ranges without a sustained adverse trend. Screening scores and model risk do not indicate deterioration.",
+      action_recommended:
+        tier === "URGENT"
+          ? "Initiate sepsis protocol now. Notify the critical care team, obtain lactate and cultures, and assess fluid responsiveness."
+          : tier === "ELEVATED"
+            ? "Repeat a complete vital assessment within 30 minutes and review recent labs, fluid balance, and suspected infection source."
+            : "Continue routine ICU monitoring and reassess with the next scheduled observation set.",
+    },
+    note: "Assessment generated from manually entered vitals (local demo calculation).",
+  };
+}
 const patientFallback: PatientList = {
   septic_patients: ["p000009", "p000143", "p000271"],
   non_septic_patients: ["p000032", "p000118", "p000406"],
