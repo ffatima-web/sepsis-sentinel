@@ -334,6 +334,31 @@ function SepsisDashboard() {
     setSettingsOpen(false);
   }
 
+  async function runCustomAssessment() {
+    setCustomLoading(true);
+    const parsed = customReadings.map(toNumbers);
+    const payload = { readings: parsed };
+    try {
+      const cleanUrl = apiUrl.replace(/\/$/, "");
+      const response = await fetch(`${cleanUrl}/triage/custom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error("Custom triage unavailable");
+      const result = (await response.json()) as CustomTriage;
+      setCustomResult(result);
+      setCustomSource("live");
+    } catch {
+      const fallback = scoreCustomReadings(parsed);
+      fallback.note = "Assessment generated from manually entered vitals (local demo calculation).";
+      setCustomResult(fallback);
+      setCustomSource("demo");
+    } finally {
+      setCustomLoading(false);
+    }
+  }
+
   const latest = vitals.hours.length - 1;
   const chartData = useMemo(
     () =>
