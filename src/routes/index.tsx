@@ -52,6 +52,121 @@ type Triage = {
 };
 
 const DEFAULT_API = "http://localhost:8000";
+
+type CustomReading = {
+  HR: string;
+  Resp: string;
+  Temp: string;
+  SBP: string;
+  MAP: string;
+  Lactate: string;
+  WBC: string;
+};
+type CustomTriage = Triage & { note?: string };
+
+const CUSTOM_FIELD_LABELS: Array<{ key: keyof CustomReading; label: string; unit: string }> = [
+  { key: "HR", label: "HR", unit: "bpm" },
+  { key: "Resp", label: "Resp", unit: "/min" },
+  { key: "Temp", label: "Temp", unit: "°C" },
+  { key: "SBP", label: "SBP", unit: "mmHg" },
+  { key: "MAP", label: "MAP", unit: "mmHg" },
+  { key: "Lactate", label: "Lactate", unit: "mmol/L (opt.)" },
+  { key: "WBC", label: "WBC", unit: "×10⁹/L (opt.)" },
+];
+
+function sampleCustomReadings(): CustomReading[] {
+  return [
+    { HR: "104", Resp: "22", Temp: "38.2", SBP: "108", MAP: "78", Lactate: "2.4", WBC: "13.1" },
+    { HR: "111", Resp: "25", Temp: "38.6", SBP: "101", MAP: "72", Lactate: "3.0", WBC: "14.8" },
+    { HR: "118", Resp: "28", Temp: "39.1", SBP: "94", MAP: "66", Lactate: "3.8", WBC: "16.2" },
+  ];
+}
+
+function toNumbers(reading: CustomReading) {
+  const parse = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const num = Number(trimmed);
+    return Number.isFinite(num) ? num : null;
+  };
+  return {
+    HR: parse(reading.HR),
+    Resp: parse(reading.Resp),
+    Temp: parse(reading.Temp),
+    SBP: parse(reading.SBP),
+    MAP: parse(reading.MAP),
+    Lactate: parse(reading.Lactate),
+    WBC: parse(reading.WBC),
+  };
+}
+
+function scoreCustomReadings(readings: ReturnType<typeof toNumbers>[]): CustomTriage {
+  const last = readings[readings.length - 1] ?? {
+    HR: null,
+    Resp: null,
+    Temp: null,
+    SBP: null,
+    MAP: null,
+    Lactate: null,
+    WBC: null,
+  };
+  const hr = last.HR ?? 80;
+  const resp = last.Resp ?? 16;
+  const temp = last.Temp ?? 37;
+  const sbp = last.SBP ?? 120;
+  const lactate = last.Lactate ?? null;
+  const wbc = last.WBC ?? null;
+
+  const respHigh = resp >= 22;
+  const sbpLow = sbp <= 100;
+  const tempAbnormal = temp >= 38.3 || temp <= 36;
+  const hrHigh = hr > 90;
+  const qsofa = (respHigh ? 1 : 0) + (sbpLow ? 1 : 0);
+  const sirs =
+    (tempAbnormal ? 1 : 0) + (hrHigh ? 1 : 0) + (respHigh ? 1 : 0) + (wbc !== null && (wbc > 12 || wbc < 4) ? 1 : 0);
+
+  let risk = 0.08 + qsofa * 0.17 + sirs * 0.09;
+  if (lactate !== null && lactate >= 2) risk += Math.min(0.18, (lactate - 2) * 0.06);
+  const escalated = risk >= 0.75;
+  risk = Math.min(0.98, risk);
+
+  const trend = readings.map((r, index) => {
+    const stepRisk = Math.max(0.03, risk - (readings.length - 1 - index) * 0.05);
+    return Number(stepRisk.toFixed(3));
+  });
+  trend[trend.length - 1] = Number(risk.toFixed(3));
+
+  const tier: Tier = escalated ? "URGENT" : risk >= 0.45 ? "ELEVATED" : "ROUTINE";
+  return {
+    patient_id: "custom-input",
+    hour: 0,
+    vitals_flags: {
+      qsofa_score: qsofa,
+      sirs_score: sirs,
+      resp_high: respHigh,
+      sbp_low: sbpLow,
+      temp_abnormal: tempAbnormal,
+      hr_high: hrHigh,
+    },
+    risk_result: { current_risk_score: Number(risk.toFixed(3)), escalated, risk_trend: trend },
+    alert: {
+      tier,
+      reasoning:
+        tier === "URGENT"
+          ? "The latest reading shows tachycardia, tachypnea, and abnormal temperature with falling blood pressure across the trend. Screening scores and model risk meet escalation thresholds for evolving sepsis."
+          : tier === "ELEVATED"
+            ? "Some measurements are trending outside expected ranges with a moderate predicted risk. The pattern warrants closer surveillance and repeat assessment."
+            : "Entered measurements remain within expected ranges without a sustained adverse trend. Screening scores and model risk do not indicate deterioration.",
+      action_recommended:
+        tier === "URGENT"
+          ? "Initiate sepsis protocol now. Notify the critical care team, obtain lactate and cultures, and assess fluid responsiveness."
+          : tier === "ELEVATED"
+            ? "Repeat a complete vital assessment within 30 minutes and review recent labs, fluid balance, and suspected infection source."
+            : "Continue routine ICU monitoring and reassess with the next scheduled observation set.",
+    },
+    note: "Assessment generated from manually entered vitals (local demo calculation).",
+  };
+}
 const patientFallback: PatientList = {
   septic_patients: ["p000009", "p000143", "p000271"],
   non_septic_patients: ["p000032", "p000118", "p000406"],
@@ -159,6 +274,10 @@ function SepsisDashboard() {
   const [source, setSource] = useState<"live" | "demo">("demo");
   const [loading, setLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [customReadings, setCustomReadings] = useState<CustomReading[]>(sampleCustomReadings);
+  const [customResult, setCustomResult] = useState<CustomTriage | null>(null);
+  const [customLoading, setCustomLoading] = useState(false);
+  const [customSource, setCustomSource] = useState<"live" | "demo">("demo");
 
   useEffect(() => {
     const saved = window.localStorage.getItem("sepsis-triage-api-url");
@@ -225,6 +344,31 @@ function SepsisDashboard() {
     window.localStorage.setItem("sepsis-triage-api-url", nextUrl);
     setApiUrl(nextUrl);
     setSettingsOpen(false);
+  }
+
+  async function runCustomAssessment() {
+    setCustomLoading(true);
+    const parsed = customReadings.map(toNumbers);
+    const payload = { readings: parsed };
+    try {
+      const cleanUrl = apiUrl.replace(/\/$/, "");
+      const response = await fetch(`${cleanUrl}/triage/custom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error("Custom triage unavailable");
+      const result = (await response.json()) as CustomTriage;
+      setCustomResult(result);
+      setCustomSource("live");
+    } catch {
+      const fallback = scoreCustomReadings(parsed);
+      fallback.note = "Assessment generated from manually entered vitals (local demo calculation).";
+      setCustomResult(fallback);
+      setCustomSource("demo");
+    } finally {
+      setCustomLoading(false);
+    }
   }
 
   const latest = vitals.hours.length - 1;
@@ -533,6 +677,123 @@ function SepsisDashboard() {
             </div>
           </aside>
         </div>
+
+        <section
+          className="mt-8 border border-dashed border-border bg-card/40"
+          aria-labelledby="custom-vitals-heading"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-border px-5 py-4">
+            <div>
+              <h2 id="custom-vitals-heading" className="font-medium">
+                Test custom vitals
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Manual evaluation — enter 3 hourly readings to simulate a trend. This does not use
+                the selected patient record.
+              </p>
+            </div>
+            <Button
+              onClick={() => void runCustomAssessment()}
+              disabled={customLoading}
+              aria-label="Run assessment on custom vitals"
+            >
+              {customLoading ? "Assessing…" : "Run assessment"}
+            </Button>
+          </div>
+
+          <div className="grid gap-px bg-border md:grid-cols-3">
+            {customReadings.map((reading, rowIndex) => (
+              <fieldset key={rowIndex} className="bg-card p-4">
+                <legend className="px-1 font-mono text-xs text-muted-foreground">
+                  Hour {rowIndex + 1}
+                </legend>
+                <div className="grid grid-cols-2 gap-3">
+                  {CUSTOM_FIELD_LABELS.map(({ key, label, unit }) => {
+                    const optional = key === "Lactate" || key === "WBC";
+                    return (
+                      <label key={key} className={optional ? "col-span-1" : "col-span-1"}>
+                        <span className="mb-1 block text-xs text-muted-foreground">
+                          {label} <span className="font-mono">{unit}</span>
+                        </span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="any"
+                          value={reading[key]}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setCustomReadings((current) =>
+                              current.map((item, index) =>
+                                index === rowIndex ? { ...item, [key]: value } : item,
+                              ),
+                            );
+                          }}
+                          className="h-9 w-full border border-border bg-background px-2 font-mono text-sm text-foreground outline-none focus:border-primary"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+
+          {customResult && (
+            <div className="border-t border-dashed border-border p-5">
+              <div
+                className={`border-l-4 bg-card px-5 py-4 ${
+                  customResult.alert.tier === "URGENT"
+                    ? "border-chart-3 text-chart-3"
+                    : customResult.alert.tier === "ELEVATED"
+                      ? "border-chart-2 text-chart-2"
+                      : "border-primary text-primary"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Custom assessment tier</p>
+                    <p className="mt-1 font-mono text-2xl font-semibold">
+                      {customResult.alert.tier}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 font-mono text-xs text-muted-foreground">
+                    <span>
+                      qSOFA {customResult.vitals_flags.qsofa_score}/3 · SIRS{" "}
+                      {customResult.vitals_flags.sirs_score}/4
+                    </span>
+                    <span>
+                      Risk {(customResult.risk_result.current_risk_score * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-5 md:grid-cols-2">
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                      Clinical reasoning
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-foreground/90">
+                      {customResult.alert.reasoning}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                      Recommended action
+                    </h3>
+                    <p className="mt-2 text-sm font-medium leading-6 text-foreground">
+                      {customResult.alert.action_recommended}
+                    </p>
+                  </div>
+                </div>
+                {customResult.note && (
+                  <p className="mt-4 text-xs italic text-muted-foreground">
+                    {customResult.note}
+                    {customSource === "live" ? " Source: live backend." : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
 
       {settingsOpen && (
